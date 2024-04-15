@@ -220,7 +220,7 @@ def main(trials_count):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument("--seed", type=str, default="100", help="Random seed")
-    parser.add_argument("--trials", type=int, default=1, help="Number of trials")
+    parser.add_argument("--trials", type=int, default=100, help="Number of trials")
 
     args = parser.parse_args()
     print(f"Arguments: {args}")

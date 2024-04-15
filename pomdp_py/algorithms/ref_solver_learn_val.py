@@ -119,7 +119,7 @@ class RootVNodeRefParticles(RootVNodeRef):
         rootnode.children = vnode.children
         return rootnode
 
-class RefSolver(Planner):
+class RefSolverLearn(Planner):
     # TODO: Update the comment.
     """Implements the solver from Kim and Kurniawati.
 

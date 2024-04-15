@@ -18,8 +18,9 @@ from pomdp_py.representations.belief.particles import update_particles_belief
 from pomdp_py.algorithms.value_iteration import ValueIteration  # Cython compiled
 from pomdp_py.algorithms.value_iteration_mdp import ValueIterationMDP
 from pomdp_py.algorithms.a_star import PriorityQueue, AStar
-# from pomdp_py.algorithms.ref_solver_clean import RefSolver
-from pomdp_py.algorithms.ref_solver_learn_val import RefSolver
+from pomdp_py.algorithms.ref_solver_clean import RefSolver
+from pomdp_py.algorithms.ref_solver_learn_val import RefSolverLearn
+# from pomdp_py.algorithms.ref_solver import RefSolver
 # from pomdp_py.algorithms.ref_solver import RefSolver
 # from pomdp_py.algorithms.ref_solver_embedded import RefSolver
 from pomdp_py.algorithms.value_function import value, qvalue, belief_update
