@@ -25,6 +25,7 @@ def particle_reinvigoration(particles, num_particles, state_transform_func=None)
     # If not enough particles, introduce artificial noise to existing particles (reinvigoration)
     new_particles = copy.deepcopy(particles)
     if len(new_particles) == 0:
+        print("Particle deprivation.")
         raise ValueError("Particle deprivation.")
 
     if len(new_particles) > num_particles:

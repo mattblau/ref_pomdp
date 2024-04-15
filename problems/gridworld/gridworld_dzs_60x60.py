@@ -8,6 +8,8 @@ from domain import State
 from problem import GridWorldProblem
 from utils import init_particles_belief, benchmark_planner
 
+from PPO_Value_Only.ppo_torch import LearningAgent
+
 
 def main(trials_count):
     scale_param = 3
@@ -54,7 +56,7 @@ def main(trials_count):
 
     # ***** BENCHMARK PARAMETERS *****
     simulations = 3000
-    planning_time = 30
+    planning_time = 10 # 30
     trials = trials_count
     nsteps = 180
     discount_factor = 0.99
@@ -126,7 +128,19 @@ def main(trials_count):
 
     print("\n\n***** BUILDING PLANNER(S) *****\n")
 
-    ref_solver = pomdp_py.RefSolver(max_depth=90,
+    # Generating learning agent
+    batch_size = 5
+    n_epochs = 4
+    alpha = 0.0003
+    n_actions = 4 # North, South, East, West
+    input_dims = (2,)
+
+    agent = LearningAgent(n_actions=n_actions, batch_size=batch_size, 
+                    alpha=alpha, n_epochs=n_epochs, 
+                    input_dims=input_dims)
+
+    ref_solver = pomdp_py.RefSolver(learning_agent=agent,
+                                    max_depth=90,
                                     max_rollout_depth=180,
                                     planning_time=planning_time,
                                     # num_sims=simulations,
@@ -219,8 +233,8 @@ def main(trials_count):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument("--seed", type=str, default="100", help="Random seed")
-    parser.add_argument("--trials", type=int, default=1, help="Number of trials")
+    parser.add_argument("--seed", type=str, default="37", help="Random seed")
+    parser.add_argument("--trials", type=int, default=50, help="Number of trials")
 
     args = parser.parse_args()
     print(f"Arguments: {args}")

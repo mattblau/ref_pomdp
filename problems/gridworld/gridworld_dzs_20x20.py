@@ -8,6 +8,7 @@ from domain import State
 from problem import GridWorldProblem
 from utils import init_particles_belief, benchmark_planner
 
+from PPO_Value_Only.ppo_torch import LearningAgent
 
 def main(trials_count):
 
@@ -157,7 +158,19 @@ def main(trials_count):
 
     print("\n\n***** BUILDING PLANNER(S) *****\n")
 
-    ref_solver = pomdp_py.RefSolver(max_depth=grid_map.n * 3,
+    # Generating learning agent
+    batch_size = 5
+    n_epochs = 4
+    alpha = 0.0003
+    n_actions = 4 # North, South, East, West
+    input_dims = (2,)
+
+    agent = LearningAgent(n_actions=n_actions, batch_size=batch_size, 
+                    alpha=alpha, n_epochs=n_epochs, 
+                    input_dims=input_dims)
+
+    ref_solver = pomdp_py.RefSolver(learning_agent = agent, 
+                                    max_depth=grid_map.n * 3,
                                     max_rollout_depth=grid_map.n * 3 * 1.2,
                                     planning_time=planning_time,
                                     # num_sims=simulations,
