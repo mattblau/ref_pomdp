@@ -44,11 +44,11 @@ if __name__ == '__main__':
             n_steps += 1
             score += reward
 
-            print("Observation: ", observation)
-            print("Action: ", action)
-            print("Val: ", val)
-            print("Reward: ", reward)
-            print("Done: ", done)
+            print("Observation: ", observation.dtype)
+            print("Action: ", action.dtype)
+            print("Val: ", type(val))
+            print("Reward: ",type(reward))
+            print("Done: ", type(done))
             agent.remember(observation, action, val, reward, done)
 
         

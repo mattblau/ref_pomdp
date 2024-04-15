@@ -438,17 +438,35 @@ class RefSolverLearn(Planner):
     def _simulate(self, state, history, root, depth, exploration_const):
         """Performs forward search using the reference policy and backs up
         each path using the analytic Bellman equation."""
+
+        if state.terminal:
+            return math.exp(self._rollout(state, history, depth, exploration_const))
+
+        # Observation:  float32
+        # Action:  int64
+        # Val:  <class 'float'>
+        # Reward:  <class 'float'>
+        # Done:  <class 'bool'>
         
-        if state.terminal or depth > self._max_depth:
-            if state.terminal:
-                return math.exp(0)
-            else:
+        # Check if the current depth exceeds maximum depth and handle learning
+        if depth > self._max_depth:
+            try:
                 self.learning_agent.learn()
-                state_tensor = T.tensor(state.position, dtype=T.float).to(self.learning_agent.critic.device)
-                # Now pass the tensor to the critic
+            except Exception as e:
+                print("An error occurred during learning:", e)
+
+            try:
+                state_tensor = T.tensor(state.position, dtype=T.float32).to(self.learning_agent.critic.device)
+            except Exception as e:
+                print("An error occurred while creating the state tensor:", e)
+
+            try:
                 val = self.learning_agent.critic(state_tensor)
-                val= T.squeeze(val).item()
-                return math.exp(val)
+                val = T.squeeze(val).item()  # Ensures it's a Python float
+            except Exception as e:
+                print("An error occurred during critic evaluation:", e)
+
+            return math.exp(val)
             # return math.exp(self._rollout(state, history, depth, exploration_const))
         
         adj_reward = lambda state, action : (self._agent._reward_model.reward_func(state, action)\
@@ -477,34 +495,26 @@ class RefSolverLearn(Planner):
                 
         next_state, observation, reward, nsteps = sample_generative_model(self._agent, state, action)
 
-        # Observation:  [ 0.00248257  0.21590841  0.01734952 -0.31100416]
-        # Action:  0
-        # Val:  0.05269667133688927
-        # Reward:  1.0
-        # Done:  False
-
-        # Store trajectory in memory buffer
-        # print("State: ", np.array(state.position))
-        # print("Action: ", action)
 
         # # QUESTION FOR HANNA: CONFIRM WE CAN USE THIS NEXT STATE
-
-        observation_tensor = T.tensor(next_state.position, dtype=T.float).to(self.learning_agent.critic.device)
-
-        # Now pass the tensor to the critic
-        val = self.learning_agent.critic(observation_tensor)
-        val= T.squeeze(val).item()
-
-        # print("Vals: ", val)
-        # print("Reward: ", float(reward))
-        # print("Done: ", next_state.terminal)
-
-        # Don't actually even need action I'm pretty sure
-
+        # Prepare the observation tensor and ensure it's on the correct device and data type
         try:
-            self.learning_agent.remember(observation_tensor, action, val, float(reward), next_state.terminal)
-        except:
-            print("An error occurred:", e)
+            observation_tensor = T.tensor(next_state.position, dtype=T.float32).to(self.learning_agent.critic.device)
+        except Exception as e:
+            print("An error occurred while creating the observation tensor:", e)
+
+        # Pass the tensor to the critic and handle possible exceptions
+        try:
+            val = self.learning_agent.critic(observation_tensor)
+            val = T.squeeze(val).item()  # Convert to Python scalar and ensure it's a float
+        except Exception as e:
+            print("An error occurred during critic evaluation:", e)
+
+        # Now call remember, ensuring all types match and are correctly handled
+        try:
+            self.learning_agent.remember(observation_tensor.cpu().numpy(), action, val, reward, next_state.terminal)
+        except Exception as e:
+            print("An error occurred while remembering the state:", e)
 
         if root[action] is None:
             self._add_qnode(root, action)
