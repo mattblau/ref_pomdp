@@ -3,8 +3,88 @@ import math
 import random
 import pomdp_py
 from datetime import datetime, timedelta
+import torch as T
+import numpy as np
+import matplotlib.pyplot as plt
 
 from domain import State
+
+n=60
+
+# Function to perform one-hot encoding for a given state
+def one_hot_encode_state(state):
+    # Map the 2D state to a unique index
+
+    index = (state[0] - 1) * n + (state[1] - 1)
+    
+    # Initialize the one-hot encoded vector
+    encoded_vector = np.zeros(n * n)
+    
+    # Set the element at the index to 1
+    encoded_vector[index] = 1
+    
+    return encoded_vector
+
+def plot_value_estimates_with_cells(planner, gridworld, grid_size=n):
+    # Create an empty grid to store the values
+    value_grid = np.zeros((grid_size, grid_size), dtype=float)
+
+    # Get cell type characters
+    cell_types = np.empty((grid_size, grid_size), dtype=str)
+    for i in range(grid_size):
+        for j in range(grid_size):
+            char = "."
+            state_position = (j + 1, i + 1)
+            if gridworld.grid_map.at_danger_zone(state_position):
+                char = "D"
+            elif gridworld.grid_map.at_goal(state_position):
+                char = "X"
+            elif gridworld.grid_map.at_landmark(state_position):
+                char = "L"
+            elif state_position in gridworld.grid_map.obstacles:
+                char = "#"
+            elif state_position == gridworld.env.state.position:
+                char = "R"
+            cell_types[i][j] = char
+
+
+    # Iterate through each position in the grid
+    for i in range(grid_size):
+        for j in range(grid_size):
+            # One-hot encode the state position
+            state_position = (j + 1, i + 1)
+            encoded_state = one_hot_encode_state(state_position)
+
+            # Convert encoded state to tensor
+            state_tensor = T.tensor(encoded_state, dtype=T.float32).to(planner.learning_agent.critic.device)
+
+            # Estimate the value using the critic
+            val = planner.learning_agent.critic(state_tensor)
+
+            # Convert the tensor to a Python float, and round to 3 decimal places
+            val = round(float(T.squeeze(val).item()), 3)
+
+            # Store the value in the grid
+            value_grid[i][j] = val
+
+    # Print the grid with value estimates for each state
+    for row in value_grid:
+        print(" ".join(f"{val:0.3f}" for val in row))
+
+    # Create a heatmap
+    plt.figure(figsize=(8, 6))
+    plt.imshow(value_grid, cmap='hot', interpolation='nearest')
+    plt.colorbar(label='Value Estimates')
+    plt.title('Value Estimates Heatmap with Cell Types')
+    plt.xlabel('Column Index')
+    plt.ylabel('Row Index')
+
+    # Add cell type characters as annotations
+    for i in range(grid_size):
+        for j in range(grid_size):
+            plt.text(j, i, cell_types[i, j], ha='center', va='center', color='black')
+
+    plt.show()
 
 
 def init_particles_belief(grid_map, init_states=None, num_particles=1000):
@@ -110,6 +190,13 @@ def test_planner(gridworld, planner, nsteps=3, discount=0.95):
         print("Resulting Belief:", gridworld.agent.cur_belief)
         print("True State:", gridworld.env.state)
         gridworld.print_state()
+
+        # print("Value Network:")
+        # try:
+        #     plot_value_estimates_with_cells(planner, gridworld)
+        # except Error as e:
+        #     print(e)
+
         print("Step Reward:", reward)
         print("Reward (Cumulative):", cumulative_reward)
         print("Reward (Cumulative Discounted):", cumulative_discounted_reward)

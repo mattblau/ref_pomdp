@@ -15,8 +15,12 @@ import random
 import math
 import numpy as np
 from tqdm import tqdm
+import json
+import os
+import sys
 
 import torch as T
+
 
 # TODO: Tidy up argument list for RefSolver class.
 # TODO: Tidy up node parameters.
@@ -24,6 +28,22 @@ import torch as T
 
 # TODO: Move to some kind of template file.
 EPSILON = 1e-20
+
+n = 60
+
+# Function to perform one-hot encoding for a given state
+def one_hot_encode_state(state):
+    # Map the 2D state to a unique index
+
+    index = (state[0] - 1) * n + (state[1] - 1)
+    
+    # Initialize the one-hot encoded vector
+    encoded_vector = np.zeros(n * n)
+    
+    # Set the element at the index to 1
+    encoded_vector[index] = 1
+    
+    return encoded_vector
 
 class TreeNodeRef:
     def __init__(self):
@@ -184,6 +204,9 @@ class RefSolverLearn(Planner):
         self._agent = None
         self._last_num_sims = -1
         self._last_planning_time = -1
+
+        self.simulation_count = 0
+        self.simulation_logs = {}
 
     @property
     def update_agent_belief(self):
@@ -382,11 +405,23 @@ class RefSolverLearn(Planner):
             ## Note: the tree node with () history will have
             ## the init belief given to the agent.
             state = self._agent.sample_belief()
+
+            # # Get estimated future reward of starting state and write to file
+            # state_tensor = T.tensor(state.position, dtype=T.float32).to(self.learning_agent.critic.device)
+            # val = self.learning_agent.critic(state_tensor)
+            # val = T.squeeze(val).item()
+            # # Write estimated future expected reward to log file
+            # log_file.write(f"Estimated future expected reward for sim {sims_count}: {val}\n")
+
             self._simulate(state, 
-                           self._agent.history,
-                           self._agent.tree,
-                           0,
-                           exploration_const=self._exploration_const)
+                        self._agent.history,
+                        self._agent.tree,
+                        0,
+                        exploration_const=self._exploration_const)
+
+            self.simulation_count += 1
+            
+            # Get true episode reward and write to same file 
             sims_count +=1
             time_taken = time.time() - start_time
 
@@ -412,6 +447,7 @@ class RefSolverLearn(Planner):
             
         u_opt = self._get_u_opt(self._agent.tree)
         est_fully_obs_policy = Particles([self._fully_obs_policy_dp(s) for s in self._agent.tree.belief.particles])   
+        print("Stochastic policy: ", u_opt)
         action = random.choices(list(u_opt.keys()), list(u_opt.values()))[0]
         return action, time_taken, sims_count, u_opt, est_fully_obs_policy
         
@@ -440,7 +476,24 @@ class RefSolverLearn(Planner):
         each path using the analytic Bellman equation."""
 
         if state.terminal:
-            return math.exp(self._rollout(state, history, depth, exploration_const))
+            
+            val = math.exp(self._rollout(state, history, depth, exploration_const))
+
+            # Write final rollout value to the simulation logs
+            simulation_data = {
+                "step": "Terminal Value",
+                "rollout_value": val
+            }
+
+            simulation_id = self.simulation_count
+
+            # try:
+            #     self.simulation_logs[simulation_id]["steps"].insert(0, simulation_data)
+            #     self._write_simulation_logs_to_file()
+            # except Exception as e:
+            #     print("An error occurred while writing the final rollout value:", e)
+
+            return val
 
         # Observation:  float32
         # Action:  int64
@@ -450,23 +503,45 @@ class RefSolverLearn(Planner):
         
         # Check if the current depth exceeds maximum depth and handle learning
         if depth > self._max_depth:
-            try:
-                self.learning_agent.learn()
-            except Exception as e:
-                print("An error occurred during learning:", e)
+            
+            self.learning_agent.learn()
+            self.learning_agent.memory.clear_memory() 
 
-            try:
-                state_tensor = T.tensor(state.position, dtype=T.float32).to(self.learning_agent.critic.device)
-            except Exception as e:
-                print("An error occurred while creating the state tensor:", e)
+            one_hot_state = one_hot_encode_state(state.position)
 
-            try:
-                val = self.learning_agent.critic(state_tensor)
-                val = T.squeeze(val).item()  # Ensures it's a Python float
-            except Exception as e:
-                print("An error occurred during critic evaluation:", e)
+            state_tensor = T.tensor(one_hot_state, dtype=T.float32).to(self.learning_agent.critic.device)
 
-            return math.exp(val)
+            val = self.learning_agent.critic(state_tensor)
+            val = T.squeeze(val).item()  # Ensures it's a Python float
+
+            # val = val * 5.0
+
+            final_val = math.exp(val)
+
+            # Write final rollout value to the simulation logs
+            simulation_data = {
+                "step": "Rollout Value",
+                "rollout_value": final_val
+            }
+
+            simulation_id = self.simulation_count
+
+            # for key in self.simulation_logs.keys():
+            #     print(key)
+
+            # try:
+            #     self.simulation_logs[simulation_id]["steps"].insert(0, simulation_data)
+            # except Exception as e:
+            #     print("An error occurred while inserting the final rollout value:", e)
+            #     print(self.simulation_logs)
+            #     sys.exit()
+
+            # try:
+            #      self._write_simulation_logs_to_file()
+            # except Exception as e:
+            #     print("An error occurred while writing the final rollout value:", e)
+            
+            return final_val
             # return math.exp(self._rollout(state, history, depth, exploration_const))
         
         adj_reward = lambda state, action : (self._agent._reward_model.reward_func(state, action)\
@@ -498,10 +573,10 @@ class RefSolverLearn(Planner):
 
         # # QUESTION FOR HANNA: CONFIRM WE CAN USE THIS NEXT STATE
         # Prepare the observation tensor and ensure it's on the correct device and data type
-        try:
-            observation_tensor = T.tensor(next_state.position, dtype=T.float32).to(self.learning_agent.critic.device)
-        except Exception as e:
-            print("An error occurred while creating the observation tensor:", e)
+        one_hot_obs = one_hot_encode_state(next_state.position)
+
+        observation_tensor = T.tensor(one_hot_obs, dtype=T.float32).to(self.learning_agent.critic.device)
+        
 
         # Pass the tensor to the critic and handle possible exceptions
         try:
@@ -515,6 +590,24 @@ class RefSolverLearn(Planner):
             self.learning_agent.remember(observation_tensor.cpu().numpy(), action, val, reward, next_state.terminal)
         except Exception as e:
             print("An error occurred while remembering the state:", e)
+
+        # # Logging simulation data
+        # simulation_id = self.simulation_count
+        
+        # if simulation_id not in self.simulation_logs:
+        #     self.simulation_logs[simulation_id] = {
+        #         "steps": []
+        #     }
+        
+        # simulation_data = {
+        #     "step": depth,
+        #     "state": state.position,
+        #     "action": action.name,
+        #     "reward": reward,
+        #     "final_reward": root.z_value ** self._discount_factor
+        # }
+        # # Append simulation data in reverse order
+        # self.simulation_logs[simulation_id]["steps"].insert(0, simulation_data)
 
         if root[action] is None:
             self._add_qnode(root, action)
@@ -539,6 +632,11 @@ class RefSolverLearn(Planner):
                         exploration_const=exploration_const) - root.z_value) / root.num_visits
 
         return root.z_value ** self._discount_factor
+
+    def _write_simulation_logs_to_file(self):
+        file_path = "simulation_logs.json"  # Or any other file name
+        with open(file_path, "w") as f:
+            json.dump(self.simulation_logs, f, indent=4)
     
     def _get_u_opt(self, root):
         
@@ -566,6 +664,9 @@ class RefSolverLearn(Planner):
                 u_opt[action] = EPSILON
             else:  
                 ha = root[action]
+                print("Action: ", action)
+                print("Num visits: ", ha.num_visits)
+                print("Action reward estimate: ", ha.r_est)
                 # u_opt[action] = sum(uu_opt[action, o] for o in ha.children.keys())
                 try:
                     pi_a = sum(0.0 if uu_opt[action, observation] == 0 else \
@@ -580,7 +681,7 @@ class RefSolverLearn(Planner):
                 u_opt[action] = math.exp(-pi_a)
                                                 
             u_normaliser += u_opt[action]
-            
+        
         return {a : p / u_normaliser for (a, p) in u_opt.items()}
     
     def _fully_obs_policy_dp(self, state):

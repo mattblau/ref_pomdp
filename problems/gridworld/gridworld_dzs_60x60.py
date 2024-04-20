@@ -1,3 +1,4 @@
+# export PYTHONPATH="/Users/matthewblau/Desktop/ref_pomdp:${PYTHONPATH}"
 import argparse
 import random
 from datetime import datetime
@@ -128,19 +129,24 @@ def main(trials_count):
 
     print("\n\n***** BUILDING PLANNER(S) *****\n")
 
+    # Thinking
+    # For Cartpole, we learn every 20 steps, with a batch size of 5 over 4 epochs
+    # For this environment, we learn every ~90 steps, with a batch size of 5 over 4 epochs
+    # We should be learning every ~90 steps, with a batch size of 25 over 4 epochs
+
     # Generating learning agent
-    batch_size = 5
-    n_epochs = 4
+    batch_size = 64
+    n_epochs = 10
     alpha = 0.0003
     n_actions = 4 # North, South, East, West
-    input_dims = (2,)
+    input_dims = (3600,)
 
     agent = LearningAgent(n_actions=n_actions, batch_size=batch_size, 
                     alpha=alpha, n_epochs=n_epochs, 
                     input_dims=input_dims)
 
     ref_solver_learn = pomdp_py.RefSolverLearn(learning_agent=agent,
-                                    max_depth=90,
+                                    max_depth=120, #90
                                     max_rollout_depth=180,
                                     planning_time=planning_time,
                                     # num_sims=simulations,
@@ -264,7 +270,7 @@ def main(trials_count):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument("--seed", type=str, default=datetime.now().strftime("%Y%m%d%H%M%S"), help="Random seed")
-    parser.add_argument("--trials", type=int, default=100, help="Number of trials")
+    parser.add_argument("--trials", type=int, default=1, help="Number of trials")
 
     args = parser.parse_args()
     print(f"Arguments: {args}")

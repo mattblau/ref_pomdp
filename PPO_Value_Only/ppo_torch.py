@@ -52,7 +52,9 @@ class CriticNetwork(nn.Module):
         self.critic = nn.Sequential(
                 nn.Linear(*input_dims, fc1_dims),
                 nn.ReLU(),
-                nn.Linear(fc1_dims, fc2_dims),
+                nn.Linear(fc1_dims, fc2_dims), 
+                nn.ReLU(),
+                nn.Linear(fc1_dims, fc2_dims), # Added an additional layer
                 nn.ReLU(),
                 nn.Linear(fc2_dims, 1)
         )
@@ -63,6 +65,7 @@ class CriticNetwork(nn.Module):
 
     def forward(self, state):
         value = self.critic(state)
+        value = value
 
         return value
 

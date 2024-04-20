@@ -87,13 +87,13 @@ def main(trials_count):
 
     # ***** BENCHMARK PARAMETERS *****
     simulations = 3000
-    planning_time = 5
+    planning_time = 20
     trials = trials_count
     nsteps = grid_map.n * 6
     discount_factor = 0.99
     # ********************************
 
-    init_states = [(1 ,4), (1 ,14)]
+    init_states = [(1 ,4), (10 ,1)] #(1,14)
     # init_states = [(1,4)]
     init_belief = init_particles_belief(grid_map, init_states=init_states, num_particles=simulations)
 
@@ -158,20 +158,20 @@ def main(trials_count):
 
     print("\n\n***** BUILDING PLANNER(S) *****\n")
 
-    # Generating learning agent
-    batch_size = 5
-    n_epochs = 4
+     # Generating learning agent
+    batch_size = 64
+    n_epochs = 10
     alpha = 0.0003
     n_actions = 4 # North, South, East, West
-    input_dims = (2,)
+    input_dims = (400,)
 
     agent = LearningAgent(n_actions=n_actions, batch_size=batch_size, 
                     alpha=alpha, n_epochs=n_epochs, 
                     input_dims=input_dims)
 
-    ref_solver = pomdp_py.RefSolver(learning_agent = agent, 
-                                    max_depth=grid_map.n * 3,
-                                    max_rollout_depth=grid_map.n * 3 * 1.2,
+    ref_solver_learn = pomdp_py.RefSolverLearn(learning_agent=agent,
+                                    max_depth=90, #90
+                                    max_rollout_depth=120,
                                     planning_time=planning_time,
                                     # num_sims=simulations,
                                     fully_obs_policy=a_star_policy,
@@ -179,9 +179,22 @@ def main(trials_count):
                                     rew_shift=rew_shift,
                                     rew_scale=rew_scale,
                                     # rew_shift=0,
-                                    # rew_scale=1,
-                                    exploration_const=0.9,
-                                    discount_factor=0.99)
+                                    # rew_scale=1/3,
+                                    exploration_const=0.5,
+                                    discount_factor=discount_factor)
+
+    ref_solver = pomdp_py.RefSolver(max_depth=60,
+                                    max_rollout_depth=120,
+                                    planning_time=planning_time,
+                                    # num_sims=simulations,
+                                    fully_obs_policy=a_star_policy,
+                                    # fully_obs_generator=a_star,
+                                    rew_shift=rew_shift,
+                                    rew_scale=rew_scale,
+                                    # rew_shift=0,
+                                    # rew_scale=1/3,
+                                    exploration_const=0.5,
+                                    discount_factor=discount_factor)
 
     # uniform rollout
     # pomcp = pomdp_py.POMCP(max_depth=grid_map.n * 3,
@@ -216,11 +229,19 @@ def main(trials_count):
     print("Planning horizon:", nsteps)
     print("Discount factor:", discount_factor)
 
+    print("\nRefSolverLearn:\n----------------------------")
+    print("Reward shift:", ref_solver_learn._rew_shift)
+    print("Reward scale:", ref_solver_learn._rew_scale)
+    print("Exploration constant:", ref_solver_learn._exploration_const)
+    print("Max tree depth:", ref_solver_learn._max_depth)
+    print("Max rollout depth:", ref_solver_learn._max_rollout_depth)
+    print("----------------------------")
+
     print("\nRefSolver:\n----------------------------")
     print("Reward shift:", ref_solver._rew_shift)
     print("Reward scale:", ref_solver._rew_scale)
     print("Exploration constant:", ref_solver._exploration_const)
-    print("Max depth:", ref_solver._max_depth)
+    print("Max tree depth:", ref_solver._max_depth)
     print("Max rollout depth:", ref_solver._max_rollout_depth)
     print("----------------------------")
 
@@ -236,15 +257,15 @@ def main(trials_count):
 
     # ********************************
 
-    results_1 = benchmark_planner(gridworld, ref_solver,
+    results_1 = benchmark_planner(gridworld, ref_solver_learn,
                                   trials=trials,
                                   nsteps=nsteps,
                                   discount_factor=discount_factor)
-
-    # results_2 = benchmark_planner(init_states, init_belief, grid_map, pomcp,
-    #                               trials=trials,
-    #                               nsteps=nsteps,
-    #                               discount_factor=discount_factor)
+    
+    results_2 = benchmark_planner(gridworld, ref_solver,
+                                  trials=trials,
+                                  nsteps=nsteps,
+                                  discount_factor=discount_factor)
 
     results_3 = benchmark_planner(gridworld, pomcp_a_star,
                                   trials=trials,
@@ -253,13 +274,13 @@ def main(trials_count):
 
     print("\n\n***** RESULTS *****\n")
 
-    print("\nResults RefSolver:")
+    print("\nResults RefSolverLearn:")
     for i, v in results_1.items():
         print(i + ":", v)
 
-    # print("\nResults POMCP (unif rollout):")
-    # for i, v in results_2.items():
-    #     print(i + ":", v)
+    print("\nResults RefSolver:")
+    for i, v in results_2.items():
+        print(i + ":", v)
 
     print("\nResults POMCP (A* rollout):")
     for i, v in results_3.items():
@@ -272,7 +293,7 @@ def main(trials_count):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument("--seed", type=str, default="100", help="Random seed")
+    parser.add_argument("--seed", type=str, default="37", help="Random seed")
     parser.add_argument("--trials", type=int, default=1, help="Number of trials")
 
     args = parser.parse_args()
