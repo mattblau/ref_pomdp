@@ -29,7 +29,7 @@ import torch as T
 # TODO: Move to some kind of template file.
 EPSILON = 1e-20
 
-n = 60
+n = 20
 
 # Function to perform one-hot encoding for a given state
 def one_hot_encode_state(state):
@@ -476,7 +476,30 @@ class RefSolverLearn(Planner):
         each path using the analytic Bellman equation."""
 
         if state.terminal:
-            
+
+            action = self._fully_obs_policy_dp(state)
+        
+            next_state, observation, reward, nsteps = sample_generative_model(self._agent, state, action)
+
+            one_hot_obs = one_hot_encode_state(next_state.position)
+
+            observation_tensor = T.tensor(one_hot_obs, dtype=T.float32).to(self.learning_agent.critic.device)
+        
+
+            # Pass the tensor to the critic and handle possible exceptions
+            try:
+                val = self.learning_agent.critic(observation_tensor)
+                val = T.squeeze(val).item()  # Convert to Python scalar and ensure it's a float
+            except Exception as e:
+                print("An error occurred during critic evaluation:", e)
+
+            # Now call remember, ensuring all types match and are correctly handled
+            try:
+                self.learning_agent.remember(observation_tensor.cpu().numpy(), action, val, reward, next_state.terminal)
+            except Exception as e:
+                print("An error occurred while remembering the state:", e)
+
+            self.learning_agent.learn()
             val = math.exp(self._rollout(state, history, depth, exploration_const))
 
             # Write final rollout value to the simulation logs
@@ -505,7 +528,6 @@ class RefSolverLearn(Planner):
         if depth > self._max_depth:
             
             self.learning_agent.learn()
-            self.learning_agent.memory.clear_memory() 
 
             one_hot_state = one_hot_encode_state(state.position)
 
@@ -664,9 +686,9 @@ class RefSolverLearn(Planner):
                 u_opt[action] = EPSILON
             else:  
                 ha = root[action]
-                print("Action: ", action)
-                print("Num visits: ", ha.num_visits)
-                print("Action reward estimate: ", ha.r_est)
+                # print("Action: ", action)
+                # print("Num visits: ", ha.num_visits)
+                # print("Action reward estimate: ", ha.r_est)
                 # u_opt[action] = sum(uu_opt[action, o] for o in ha.children.keys())
                 try:
                     pi_a = sum(0.0 if uu_opt[action, observation] == 0 else \

@@ -69,6 +69,7 @@ def main(trials_count):
 
     # init_pos = (1,4)
     init_pos = random.sample(init_states, 1)[0]
+    # init_pos = (1, 41)
     init_state = State(init_pos,
                        init_pos in grid_map.goals,
                        init_pos in grid_map.landmarks,
@@ -159,7 +160,7 @@ def main(trials_count):
                                     exploration_const=0.5,
                                     discount_factor=discount_factor)
 
-    ref_solver = pomdp_py.RefSolver(max_depth=90,
+    ref_solver = pomdp_py.RefSolver(max_depth=120,
                                     max_rollout_depth=180,
                                     planning_time=planning_time,
                                     # num_sims=simulations,
@@ -243,10 +244,10 @@ def main(trials_count):
                                   nsteps=nsteps,
                                   discount_factor=discount_factor)
 
-    results_3 = benchmark_planner(gridworld, pomcp_a_star,
-                                  trials=trials,
-                                  nsteps=nsteps,
-                                  discount_factor=discount_factor)
+    # results_3 = benchmark_planner(gridworld, pomcp_a_star,
+    #                               trials=trials,
+    #                               nsteps=nsteps,
+    #                               discount_factor=discount_factor)
 
     print("\n\n***** RESULTS *****\n")
 
@@ -258,9 +259,9 @@ def main(trials_count):
     for i, v in results_2.items():
         print(i + ":", v)
 
-    print("\nResults POMCP (A* rollout):")
-    for i, v in results_3.items():
-        print(i + ":", v)
+    # print("\nResults POMCP (A* rollout):")
+    # for i, v in results_3.items():
+    #     print(i + ":", v)
 
     print("\n\nPreprocessing time fully observed policy:", stop - start, "\n")
 

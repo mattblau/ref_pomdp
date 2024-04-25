@@ -58,6 +58,13 @@ class CriticNetwork(nn.Module):
                 nn.ReLU(),
                 nn.Linear(fc2_dims, 1)
         )
+        # self.critic = nn.Sequential(
+        #         nn.Linear(*input_dims, fc1_dims),
+        #         nn.ReLU(),
+        #         nn.Linear(fc1_dims, fc2_dims), 
+        #         nn.ReLU(),
+        #         nn.Linear(fc2_dims, 1)
+        # )
 
         self.optimizer = optim.Adam(self.parameters(), lr=alpha)
         self.device = T.device('cuda:0' if T.cuda.is_available() else 'cpu')
@@ -74,6 +81,14 @@ class CriticNetwork(nn.Module):
 
     def load_checkpoint(self):
         self.load_state_dict(T.load(self.checkpoint_file))
+
+    def reinitialize_weights(self):
+        def weights_init(m):
+            if isinstance(m, nn.Linear):
+                nn.init.xavier_uniform_(m.weight)
+                nn.init.constant_(m.bias, 0.0)
+
+        self.apply(weights_init)
 
 class LearningAgent:
     def __init__(self, n_actions, input_dims, gamma=0.99, alpha=0.0003, gae_lambda=0.95,
@@ -98,41 +113,40 @@ class LearningAgent:
         self.critic.load_checkpoint()
 
     def learn(self):
-        with open('critic_losses.txt', 'a') as log_file:
-            for _ in range(self.n_epochs):
-                state_arr, action_arr, vals_arr,\
-                reward_arr, dones_arr, batches = \
-                        self.memory.generate_batches()
+        for _ in range(self.n_epochs):
+            state_arr, action_arr, vals_arr,\
+            reward_arr, dones_arr, batches = \
+                    self.memory.generate_batches()
 
-                values = vals_arr
-                advantage = np.zeros(len(reward_arr), dtype=np.float32)
+            values = vals_arr
+            advantage = np.zeros(len(reward_arr), dtype=np.float32)
 
-                for t in range(len(reward_arr)-1):
-                    discount = 1
-                    a_t = 0
-                    for k in range(t, len(reward_arr)-1):
-                        a_t += discount*(reward_arr[k] + self.gamma*values[k+1]*\
-                                (1-int(dones_arr[k])) - values[k])
-                        discount *= self.gamma*self.gae_lambda
-                    advantage[t] = a_t
-                advantage = T.tensor(advantage).to(self.critic.device)
+            for t in range(len(reward_arr)-1):
+                discount = 1
+                a_t = 0
+                for k in range(t, len(reward_arr)-1):
+                    a_t += discount*(reward_arr[k] + self.gamma*values[k+1]*\
+                            (1-int(dones_arr[k])) - values[k])
+                    discount *= self.gamma*self.gae_lambda
+                advantage[t] = a_t
+            advantage = T.tensor(advantage).to(self.critic.device)
 
-                values = T.tensor(values).to(self.critic.device)
-                for batch in batches:
-                    states = T.tensor(state_arr[batch], dtype=T.float).to(self.critic.device)
-                
-                    critic_value = self.critic(states)
+            values = T.tensor(values).to(self.critic.device)
+            for batch in batches:
+                states = T.tensor(state_arr[batch], dtype=T.float).to(self.critic.device)
+            
+                critic_value = self.critic(states)
 
-                    critic_value = T.squeeze(critic_value)
+                critic_value = T.squeeze(critic_value)
 
-                    returns = advantage[batch] + values[batch]
-                    critic_loss = (returns-critic_value)**2
-                    critic_loss = critic_loss.mean()
-                    self.critic.optimizer.zero_grad()
-                    critic_loss.backward()
-                    self.critic.optimizer.step()
-                
-            log_file.write(f'{critic_loss.item()}\n')
+                returns = advantage[batch] + values[batch]
+                critic_loss = (returns-critic_value)**2
+                critic_loss = critic_loss.mean()
+                self.critic.optimizer.zero_grad()
+                critic_loss.backward()
+                self.critic.optimizer.step()
+            
+        # log_file.write(f'{critic_loss.item()}\n')
 
-            self.memory.clear_memory()               
+        self.memory.clear_memory()               
 

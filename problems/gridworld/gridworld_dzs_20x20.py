@@ -87,13 +87,13 @@ def main(trials_count):
 
     # ***** BENCHMARK PARAMETERS *****
     simulations = 3000
-    planning_time = 20
+    planning_time = 5
     trials = trials_count
     nsteps = grid_map.n * 6
     discount_factor = 0.99
     # ********************************
 
-    init_states = [(1 ,4), (10 ,1)] #(1,14)
+    init_states = [(1 ,4), (1 ,14)] #(1,14)
     # init_states = [(1,4)]
     init_belief = init_particles_belief(grid_map, init_states=init_states, num_particles=simulations)
 
@@ -170,7 +170,7 @@ def main(trials_count):
                     input_dims=input_dims)
 
     ref_solver_learn = pomdp_py.RefSolverLearn(learning_agent=agent,
-                                    max_depth=90, #90
+                                    max_depth=60, #90
                                     max_rollout_depth=120,
                                     planning_time=planning_time,
                                     # num_sims=simulations,
@@ -267,10 +267,10 @@ def main(trials_count):
                                   nsteps=nsteps,
                                   discount_factor=discount_factor)
 
-    results_3 = benchmark_planner(gridworld, pomcp_a_star,
-                                  trials=trials,
-                                  nsteps=nsteps,
-                                  discount_factor=discount_factor)
+    # results_3 = benchmark_planner(gridworld, pomcp_a_star,
+    #                               trials=trials,
+    #                               nsteps=nsteps,
+    #                               discount_factor=discount_factor)
 
     print("\n\n***** RESULTS *****\n")
 
@@ -282,9 +282,9 @@ def main(trials_count):
     for i, v in results_2.items():
         print(i + ":", v)
 
-    print("\nResults POMCP (A* rollout):")
-    for i, v in results_3.items():
-        print(i + ":", v)
+    # print("\nResults POMCP (A* rollout):")
+    # for i, v in results_3.items():
+    #     print(i + ":", v)
 
     print("\n\nPreprocessing time fully observed policy:", stop - start, "\n")
 

@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 
 from domain import State
 
-n=60
+n=20
 
 # Function to perform one-hot encoding for a given state
 def one_hot_encode_state(state):
@@ -191,11 +191,11 @@ def test_planner(gridworld, planner, nsteps=3, discount=0.95):
         print("True State:", gridworld.env.state)
         gridworld.print_state()
 
-        # print("Value Network:")
-        # try:
-        #     plot_value_estimates_with_cells(planner, gridworld)
-        # except Error as e:
-        #     print(e)
+        print("Value Network:")
+        try:
+            plot_value_estimates_with_cells(planner, gridworld)
+        except Error as e:
+            print(e)
 
         print("Step Reward:", reward)
         print("Reward (Cumulative):", cumulative_reward)
@@ -207,11 +207,14 @@ def test_planner(gridworld, planner, nsteps=3, discount=0.95):
         if isinstance(planner, pomdp_py.PORollout):
             print("__best_reward__: %d" % planner.last_best_reward)
         if isinstance(gridworld.agent.cur_belief, pomdp_py.Histogram):
-            new_belief = pomdp_py.update_histogram_belief(gridworld.agent.cur_belief,
-                                                          action, observation,
-                                                          gridworld.agent.observation_model,
-                                                          gridworld.agent.transition_model)
-            gridworld.agent.set_belief(new_belief)
+            try:
+                new_belief = pomdp_py.update_histogram_belief(gridworld.agent.cur_belief,
+                                                            action, observation,
+                                                            gridworld.agent.observation_model,
+                                                            gridworld.agent.transition_model)
+                gridworld.agent.set_belief(new_belief)
+            except OverflowError as e:
+                print("An overflow error occurred:", e)
 
         if gridworld.terminal(gridworld.env.state):
             print("\n====== TRIAL ENDED! ======")
@@ -261,6 +264,11 @@ def benchmark_planner(gridworld,
         try:
             # Test and time
             start_time = datetime.now()
+            if isinstance(planner, pomdp_py.RefSolverLearn):
+                print("Reinitialised critic weights")
+                planner.learning_agent.critic.reinitialize_weights()
+
+
             cr, crd = test_planner(_problem, planner, nsteps=nsteps, discount=discount_factor)
             stop_time = datetime.now()
 
