@@ -136,7 +136,7 @@ def main(trials_count):
     # We should be learning every ~90 steps, with a batch size of 25 over 4 epochs
 
     # Generating learning agent
-    batch_size = 64
+    batch_size = 32 # 64
     n_epochs = 10
     alpha = 0.0003
     n_actions = 4 # North, South, East, West
