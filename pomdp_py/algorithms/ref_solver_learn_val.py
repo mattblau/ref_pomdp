@@ -29,7 +29,7 @@ import torch as T
 # TODO: Move to some kind of template file.
 EPSILON = 1e-20
 
-n = 20
+n = 60
 
 # Function to perform one-hot encoding for a given state
 def one_hot_encode_state(state):
@@ -224,7 +224,7 @@ class RefSolverLearn(Planner):
         the last `plan` call to run."""
         return self._last_planning_time
 
-    def plan(self, agent):
+    def plan(self, agent, execution_step_count):
 
         if not isinstance(agent.belief, Particles):
             raise TypeError("Agent's belief is not represented using particles.\n"\
@@ -234,7 +234,7 @@ class RefSolverLearn(Planner):
         self._agent = agent
         if not hasattr(self._agent, "tree"):
             self._agent.add_attr("tree", None)
-        action, time_taken, sims_count, u_opt, est_fully_obs_policy = self._search()
+        action, time_taken, sims_count, u_opt, est_fully_obs_policy = self._search(execution_step_count)
         
         print("Root:", agent.tree)
         print("V", math.log(agent.tree.z_value))
@@ -387,7 +387,7 @@ class RefSolverLearn(Planner):
                                         self._r_est_init)
             vnode[action] = history_action_node
 
-    def _search(self):
+    def _search(self, execution_step_count):
         sims_count = 0
         time_taken = 0
         stop_by_sims = self._num_sims > 0
@@ -417,7 +417,7 @@ class RefSolverLearn(Planner):
                         self._agent.history,
                         self._agent.tree,
                         0,
-                        exploration_const=self._exploration_const)
+                        exploration_const=self._exploration_const, execution_step_count=execution_step_count)
 
             self.simulation_count += 1
             
@@ -457,58 +457,97 @@ class RefSolverLearn(Planner):
                                              - self._rew_shift) * self._rew_scale
         
         action = self._fully_obs_policy_dp(state)
-        #TODO: This part makes it specific to a problem with goal states.
+
         if state.terminal or depth > self._max_rollout_depth:
             # Choose an arbitrary action as goal state is absorbing.
+
+            # TODO: do we store adj reward or just immediate?
+
+            r = adj_reward(state, action)
+
+             # Sample next_state and reward
+            next_state, observation, reward, nsteps = sample_generative_model(self._agent, state, action)
+            # One-hot encode state to store in mem buffer
+            one_hot_obs = one_hot_encode_state(next_state.position)
+            # Convert to tensor for appropriate storage
+            observation_tensor = T.tensor(one_hot_obs, dtype=T.float32).to(self.learning_agent.critic.device)
+            # Evaluate the tensor using the critic
+            val = self.learning_agent.critic(observation_tensor)
+            val = T.squeeze(val).item()  
+            # Remember transition
+            self.learning_agent.remember(observation_tensor.cpu().numpy(), action, val, reward, next_state.terminal)
+
+            # Learn from memory buffer
+            self.learning_agent.learn()
+
+
             return adj_reward(state, action) 
         
         next_state, observation, reward, nsteps = sample_generative_model(self._agent, state, action)
         reward = (reward - self._rew_shift) * self._rew_scale
+
+        # Store transition in memory buffer
+        # One-hot encode state to store in mem buffer
+        one_hot_obs = one_hot_encode_state(next_state.position)
+        # Convert to tensor for appropriate storage
+        observation_tensor = T.tensor(one_hot_obs, dtype=T.float32).to(self.learning_agent.critic.device)
+        # Evaluate the tensor using the critic
+        val = self.learning_agent.critic(observation_tensor)
+        val = T.squeeze(val).item()  
+        # Remember transition
+        self.learning_agent.remember(observation_tensor.cpu().numpy(), action, val, reward, next_state.terminal)
+
         
         return reward + self._discount_factor * \
             self._rollout(next_state,
                           history + ((action, observation),),
                           depth+1,
                           exploration_const)
+
+    # Observation:  float32
+    # Action:  int64
+    # Val:  <class 'float'>
+    # Reward:  <class 'float'>
+    # Done:  <class 'bool'>
     
-    def _simulate(self, state, history, root, depth, exploration_const):
+    def _simulate(self, state, history, root, depth, exploration_const, execution_step_count):
         """Performs forward search using the reference policy and backs up
         each path using the analytic Bellman equation."""
 
+        # If in terminal state
         if state.terminal:
 
             action = self._fully_obs_policy_dp(state)
+
+            if execution_step_count < 10:
         
-            next_state, observation, reward, nsteps = sample_generative_model(self._agent, state, action)
-
-            one_hot_obs = one_hot_encode_state(next_state.position)
-
-            observation_tensor = T.tensor(one_hot_obs, dtype=T.float32).to(self.learning_agent.critic.device)
-        
-
-            # Pass the tensor to the critic and handle possible exceptions
-            try:
+                # Sample next_state and reward
+                next_state, observation, reward, nsteps = sample_generative_model(self._agent, state, action)
+                # One-hot encode state to store in mem buffer
+                one_hot_obs = one_hot_encode_state(next_state.position)
+                # Convert to tensor for appropriate storage
+                observation_tensor = T.tensor(one_hot_obs, dtype=T.float32).to(self.learning_agent.critic.device)
+                # Evaluate the tensor using the critic
                 val = self.learning_agent.critic(observation_tensor)
-                val = T.squeeze(val).item()  # Convert to Python scalar and ensure it's a float
-            except Exception as e:
-                print("An error occurred during critic evaluation:", e)
-
-            # Now call remember, ensuring all types match and are correctly handled
-            try:
+                val = T.squeeze(val).item()  
+                # Remember transition
                 self.learning_agent.remember(observation_tensor.cpu().numpy(), action, val, reward, next_state.terminal)
-            except Exception as e:
-                print("An error occurred while remembering the state:", e)
 
-            self.learning_agent.learn()
-            val = math.exp(self._rollout(state, history, depth, exploration_const))
+                # Learn from memory buffer
+                self.learning_agent.learn()
 
-            # Write final rollout value to the simulation logs
-            simulation_data = {
-                "step": "Terminal Value",
-                "rollout_value": val
-            }
+            adj_reward = lambda state, action : (self._agent._reward_model.reward_func(state, action)\
+                                             - self._rew_shift) * self._rew_scale
+        
+            return math.exp(adj_reward(state, action))
 
-            simulation_id = self.simulation_count
+            # # Write final rollout value to the simulation logs
+            # simulation_data = {
+            #     "step": "Terminal Value",
+            #     "rollout_value": val
+            # }
+
+            # simulation_id = self.simulation_count
 
             # try:
             #     self.simulation_logs[simulation_id]["steps"].insert(0, simulation_data)
@@ -516,37 +555,44 @@ class RefSolverLearn(Planner):
             # except Exception as e:
             #     print("An error occurred while writing the final rollout value:", e)
 
-            return val
-
-        # Observation:  float32
-        # Action:  int64
-        # Val:  <class 'float'>
-        # Reward:  <class 'float'>
-        # Done:  <class 'bool'>
-        
         # Check if the current depth exceeds maximum depth and handle learning
         if depth > self._max_depth:
+
+            if execution_step_count > 10:
+
+                # print("Using Value Network for rollout")
+
+                one_hot_state = one_hot_encode_state(state.position)
+                state_tensor = T.tensor(one_hot_state, dtype=T.float32).to(self.learning_agent.critic.device)
+                val = self.learning_agent.critic(state_tensor)
+                val = T.squeeze(val).item()  
+                final_val = math.exp(val)
+                return final_val
+
+            else:
+
+                 return math.exp(self._rollout(state, history, depth, exploration_const))
             
-            self.learning_agent.learn()
+            # self.learning_agent.learn()
 
-            one_hot_state = one_hot_encode_state(state.position)
+            # one_hot_state = one_hot_encode_state(state.position)
 
-            state_tensor = T.tensor(one_hot_state, dtype=T.float32).to(self.learning_agent.critic.device)
+            # state_tensor = T.tensor(one_hot_state, dtype=T.float32).to(self.learning_agent.critic.device)
 
-            val = self.learning_agent.critic(state_tensor)
-            val = T.squeeze(val).item()  # Ensures it's a Python float
+            # val = self.learning_agent.critic(state_tensor)
+            # val = T.squeeze(val).item()  # Ensures it's a Python float
 
-            # val = val * 5.0
+            # # val = val * 5.0
 
-            final_val = math.exp(val)
+            # final_val = math.exp(val)
 
-            # Write final rollout value to the simulation logs
-            simulation_data = {
-                "step": "Rollout Value",
-                "rollout_value": final_val
-            }
+            # # Write final rollout value to the simulation logs
+            # simulation_data = {
+            #     "step": "Rollout Value",
+            #     "rollout_value": final_val
+            # }
 
-            simulation_id = self.simulation_count
+            # simulation_id = self.simulation_count
 
             # for key in self.simulation_logs.keys():
             #     print(key)
@@ -563,8 +609,8 @@ class RefSolverLearn(Planner):
             # except Exception as e:
             #     print("An error occurred while writing the final rollout value:", e)
             
-            return final_val
-            # return math.exp(self._rollout(state, history, depth, exploration_const))
+            # return final_val
+           
         
         adj_reward = lambda state, action : (self._agent._reward_model.reward_func(state, action)\
                                              - self._rew_shift) * self._rew_scale
@@ -592,26 +638,26 @@ class RefSolverLearn(Planner):
                 
         next_state, observation, reward, nsteps = sample_generative_model(self._agent, state, action)
 
+        if execution_step_count < 10:
+            # # QUESTION FOR HANNA: CONFIRM WE CAN USE THIS NEXT STATE
+            # Prepare the observation tensor and ensure it's on the correct device and data type
+            one_hot_obs = one_hot_encode_state(next_state.position)
 
-        # # QUESTION FOR HANNA: CONFIRM WE CAN USE THIS NEXT STATE
-        # Prepare the observation tensor and ensure it's on the correct device and data type
-        one_hot_obs = one_hot_encode_state(next_state.position)
+            observation_tensor = T.tensor(one_hot_obs, dtype=T.float32).to(self.learning_agent.critic.device)
+            
 
-        observation_tensor = T.tensor(one_hot_obs, dtype=T.float32).to(self.learning_agent.critic.device)
-        
+            # Pass the tensor to the critic and handle possible exceptions
+            try:
+                val = self.learning_agent.critic(observation_tensor)
+                val = T.squeeze(val).item()  # Convert to Python scalar and ensure it's a float
+            except Exception as e:
+                print("An error occurred during critic evaluation:", e)
 
-        # Pass the tensor to the critic and handle possible exceptions
-        try:
-            val = self.learning_agent.critic(observation_tensor)
-            val = T.squeeze(val).item()  # Convert to Python scalar and ensure it's a float
-        except Exception as e:
-            print("An error occurred during critic evaluation:", e)
-
-        # Now call remember, ensuring all types match and are correctly handled
-        try:
-            self.learning_agent.remember(observation_tensor.cpu().numpy(), action, val, reward, next_state.terminal)
-        except Exception as e:
-            print("An error occurred while remembering the state:", e)
+            # Now call remember, ensuring all types match and are correctly handled
+            try:
+                self.learning_agent.remember(observation_tensor.cpu().numpy(), action, val, reward, next_state.terminal)
+            except Exception as e:
+                print("An error occurred while remembering the state:", e)
 
         # # Logging simulation data
         # simulation_id = self.simulation_count
@@ -651,7 +697,7 @@ class RefSolverLearn(Planner):
                         * self._simulate(next_state, history + ((action, observation),), \
                         root=root[action][observation], 
                         depth=depth + 1, 
-                        exploration_const=exploration_const) - root.z_value) / root.num_visits
+                        exploration_const=exploration_const, execution_step_count=execution_step_count) - root.z_value) / root.num_visits
 
         return root.z_value ** self._discount_factor
 

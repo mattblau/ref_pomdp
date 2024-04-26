@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 
 from domain import State
 
-n=20
+n=60
 
 # Function to perform one-hot encoding for a given state
 def one_hot_encode_state(state):
@@ -156,9 +156,14 @@ def test_planner(gridworld, planner, nsteps=3, discount=0.95):
     gridworld.print_state()
 
     for i in range(nsteps):
-        # Step 2: Agent plans action
-        action = planner.plan(gridworld.agent)
 
+        if isinstance(planner, pomdp_py.RefSolverLearn):
+            # Step 2: Agent plans action
+            action = planner.plan(gridworld.agent, i)
+        else:
+            # Step 2: Agent plans action
+            action = planner.plan(gridworld.agent)
+        
         # Step 3: Environment transitions state
         reward = gridworld.env.state_transition(action, execute=True)
 
@@ -191,11 +196,11 @@ def test_planner(gridworld, planner, nsteps=3, discount=0.95):
         print("True State:", gridworld.env.state)
         gridworld.print_state()
 
-        print("Value Network:")
-        try:
-            plot_value_estimates_with_cells(planner, gridworld)
-        except Error as e:
-            print(e)
+        # print("Value Network:")
+        # try:
+        #     plot_value_estimates_with_cells(planner, gridworld)
+        # except Error as e:
+        #     print(e)
 
         print("Step Reward:", reward)
         print("Reward (Cumulative):", cumulative_reward)

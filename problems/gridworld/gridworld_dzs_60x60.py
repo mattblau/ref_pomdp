@@ -147,7 +147,7 @@ def main(trials_count):
                     input_dims=input_dims)
 
     ref_solver_learn = pomdp_py.RefSolverLearn(learning_agent=agent,
-                                    max_depth=120, #90
+                                    max_depth=90, #90
                                     max_rollout_depth=180,
                                     planning_time=planning_time,
                                     # num_sims=simulations,
