@@ -3,7 +3,8 @@
 RELATIVE_FILE_PATH=$1
 NUM_TRIALS=$(($2))
 # NUM_PROCESSORS=$(($(nproc --all)/2))
-NUM_PROCESSORS=$(($(sysctl -n hw.ncpu)/2))
+# NUM_PROCESSORS=$(($(sysctl -n hw.ncpu)/2))
+NUM_PROCESSORS=4
 TRIALS_PER_PROCESS=$((NUM_TRIALS/NUM_PROCESSORS))
 TRIALS_REMAINDER=$((NUM_TRIALS%NUM_PROCESSORS))
 CURRENT_TIME=$(date | sed 's/ //g' | sed 's/:/_/g')

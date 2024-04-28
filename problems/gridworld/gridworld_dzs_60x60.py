@@ -160,7 +160,7 @@ def main(trials_count):
                                     exploration_const=0.5,
                                     discount_factor=discount_factor)
 
-    ref_solver = pomdp_py.RefSolver(max_depth=120,
+    ref_solver = pomdp_py.RefSolver(max_depth=90,
                                     max_rollout_depth=180,
                                     planning_time=planning_time,
                                     # num_sims=simulations,
